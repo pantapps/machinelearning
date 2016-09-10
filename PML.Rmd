@@ -1,0 +1,176 @@
+---
+title: "Predicting How Well They Did The Exercise"
+author: "Eduardo Garcia del Valle"
+date: "10 de septiembre de 2016"
+output: 
+  html_document: 
+    self_contained: no
+---
+
+## Abstract
+
+The goal of this project is to predict the manner in which a fitness exercise is 
+performed. For this purpose, we use the datasets provided by 
+http://groupware.les.inf.puc-rio.br/har to obtain and test a prediction model.
+
+## Data Retrieval
+
+First we load the training and test sets provided:
+
+```{r cache=T}
+trainData <- read.csv('pml-training.csv')
+testData <- read.csv('pml-testing.csv')
+```
+
+## Exploratory Analysis
+
+To get a view of the data we're using to obtain the predictive model, we perform
+several exploratory analysis on the training set.
+
+```{r}
+dim(trainData)
+```
+
+```{r eval=FALSE}
+summary(trainData)
+
+head(trainData)
+```
+
+We observe that the dataset contains 19622 observations with 160 columns, 
+being the outcome column "classe" the last one. Before we can use this data to 
+build a prediction model, we have to reduce the number of predictors by 
+preprocessing the data.
+
+## Data Preprocessing
+
+Let's start by removing the columns with irrelevant information:
+
+```{r}
+irrelevantCol <- c(
+  "X","user_name","raw_timestamp_part_1","raw_timestamp_part_2",
+  "cvtd_timestamp","new_window", "num_window")
+
+trainDataProcessed <- trainData[,!(names(trainData) %in% irrelevantCol)]
+testDataProcessed <- testData[,!(names(testData) %in% irrelevantCol)]
+
+dim(trainDataProcessed)
+```
+
+Now let's remove the non numeric columns (except for the "classe"):
+
+```{r}
+numericCol <- sapply(trainDataProcessed[,-153], is.numeric)
+
+trainDataProcessed <- trainDataProcessed[ , numericCol]
+testDataProcessed <- testDataProcessed[ , numericCol]
+
+dim(trainDataProcessed)
+```
+
+There are still 119 predictors, so we remove the ones with NA values:
+
+```{r}
+trainDataProcessed <- trainDataProcessed[,(colSums(is.na(trainDataProcessed)) == 0)]
+testDataProcessed <- testDataProcessed[,(colSums(is.na(testDataProcessed)) == 0)]
+
+dim(trainDataProcessed)
+```
+
+Now we have 52 predictors. Let's try to reduce the set even more by removing
+highly correlated variables. First we plot the correlation matrix:
+
+```{r, message=F, warning=F}
+library(caret)
+library(corrplot)
+```
+
+```{r}
+correlationMatrix <- cor(trainDataProcessed[, -53])
+corrplot(
+  correlationMatrix, order = "FPC", method = "color", type = "lower", 
+  tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+
+We observe some dark points (with high negative and positive correlation), which 
+mean they don't add much information to our model. Let's remove those with a
+correlation coefficient higher than 0.90:
+
+```{r}
+correlatedCol <- findCorrelation(correlationMatrix, cutoff = .90)
+
+trainDataProcessed <- trainDataProcessed[,-correlatedCol]
+testDataProcessed <- testDataProcessed[,-correlatedCol]
+
+dim(trainDataProcessed)
+```
+
+With this the number of columns is reduced to 46 (45 predictors and the 
+outcome). We can now create the predictor model.
+
+
+## Training Model
+
+We have a large dataset and still many predictors. Random Forests provide good
+performance under these conditions, so that's the algorithm we select to build
+our prediction model.
+
+First we split the training set to obtain the actual model training set and a 
+validation set:
+
+```{r}
+set.seed(12345)
+
+splitIndex <- createDataPartition(
+  y=trainDataProcessed$classe, p=0.6, list=FALSE)
+
+modelTrainData  <- trainDataProcessed[splitIndex,]; 
+modelValData <- trainDataProcessed[-splitIndex,]
+
+```
+
+Now we train the classifier using random forests with 3-fold cross-validation
+
+```{r cache=TRUE}
+ctrl <- trainControl(method="cv", number=3)
+
+set.seed(12345)
+
+model <- train(classe ~ ., data=modelTrainData, method="rf", trControl=ctrl)
+```
+
+To understand our model, let's take a look to the most important predictors:
+
+```{r, message=F, warning=F}
+varImp(model, scale = FALSE)
+```
+
+Most predictors are quite relevant, which means the preprocessing was correct.
+
+## Evaluating Model
+
+Now we use the validation data to measure the performance of our prediction 
+model:
+
+```{r}
+confusionMatrix(predict(model, newdata=modelValData), modelValData$classe)
+```
+
+We got a high accuracy, close of 99% and a model error of 1%.
+
+## Predictions
+
+Finally we get the predictions for the test dataset provided:
+
+```{r}
+testPredictions <- predict(model, newdata=testDataProcessed)
+
+testPredictions
+```
+
+## Conclusion
+
+The predictor model built with random forests and cross validation over the 
+HAR weight lifting exercises dataset allows to determine with a high accuracy 
+the way in which an exercise was performed.
+

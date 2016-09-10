@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+
+<meta name="author" content="Eduardo Garcia del Valle" />
+
+
+<title>Predicting How Well They Did The Exercise</title>
+
+<script src="PML_files/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="PML_files/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="PML_files/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="PML_files/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="PML_files/bootstrap-3.3.5/shim/respond.min.js"></script>
+
+<style type="text/css">code{white-space: pre;}</style>
+<link rel="stylesheet"
+      href="PML_files/highlight/default.css"
+      type="text/css" />
+<script src="PML_files/highlight/highlight.js"></script>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs && document.readyState && document.readyState === "complete") {
+   window.setTimeout(function() {
+      hljs.initHighlighting();
+   }, 0);
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+</style>
+
+
+<div class="container-fluid main-container">
+
+<!-- tabsets -->
+<script src="PML_files/navigation-1.0/tabsets.js"></script>
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">Predicting How Well They Did The Exercise</h1>
+<h4 class="author"><em>Eduardo Garcia del Valle</em></h4>
+<h4 class="date"><em>10 de septiembre de 2016</em></h4>
+
+</div>
+
+
+<div id="abstract" class="section level2">
+<h2>Abstract</h2>
+<p>The goal of this project is to predict the manner in which a fitness exercise is performed. For this purpose, we use the datasets provided by <a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a> to obtain and test a prediction model.</p>
+</div>
+<div id="data-retrieval" class="section level2">
+<h2>Data Retrieval</h2>
+<p>First we load the training and test sets provided:</p>
+<pre class="r"><code>trainData &lt;- read.csv(&#39;pml-training.csv&#39;)
+testData &lt;- read.csv(&#39;pml-testing.csv&#39;)</code></pre>
+</div>
+<div id="exploratory-analysis" class="section level2">
+<h2>Exploratory Analysis</h2>
+<p>To get a view of the data we’re using to obtain the predictive model, we perform several exploratory analysis on the training set.</p>
+<pre class="r"><code>dim(trainData)</code></pre>
+<pre><code>## [1] 19622   160</code></pre>
+<pre class="r"><code>summary(trainData)
+
+head(trainData)</code></pre>
+<p>We observe that the dataset contains 19622 observations with 160 columns, being the outcome column “classe” the last one. Before we can use this data to build a prediction model, we have to reduce the number of predictors by preprocessing the data.</p>
+</div>
+<div id="data-preprocessing" class="section level2">
+<h2>Data Preprocessing</h2>
+<p>Let’s start by removing the columns with irrelevant information:</p>
+<pre class="r"><code>irrelevantCol &lt;- c(
+  &quot;X&quot;,&quot;user_name&quot;,&quot;raw_timestamp_part_1&quot;,&quot;raw_timestamp_part_2&quot;,
+  &quot;cvtd_timestamp&quot;,&quot;new_window&quot;, &quot;num_window&quot;)
+
+trainDataProcessed &lt;- trainData[,!(names(trainData) %in% irrelevantCol)]
+testDataProcessed &lt;- testData[,!(names(testData) %in% irrelevantCol)]
+
+dim(trainDataProcessed)</code></pre>
+<pre><code>## [1] 19622   153</code></pre>
+<p>Now let’s remove the non numeric columns (except for the “classe”):</p>
+<pre class="r"><code>numericCol &lt;- sapply(trainDataProcessed[,-153], is.numeric)
+
+trainDataProcessed &lt;- trainDataProcessed[ , numericCol]
+testDataProcessed &lt;- testDataProcessed[ , numericCol]
+
+dim(trainDataProcessed)</code></pre>
+<pre><code>## [1] 19622   120</code></pre>
+<p>There are still 119 predictors, so we remove the ones with NA values:</p>
+<pre class="r"><code>trainDataProcessed &lt;- trainDataProcessed[,(colSums(is.na(trainDataProcessed)) == 0)]
+testDataProcessed &lt;- testDataProcessed[,(colSums(is.na(testDataProcessed)) == 0)]
+
+dim(trainDataProcessed)</code></pre>
+<pre><code>## [1] 19622    53</code></pre>
+<p>Now we have 52 predictors. Let’s try to reduce the set even more by removing highly correlated variables. First we plot the correlation matrix:</p>
+<pre class="r"><code>library(caret)
+library(corrplot)</code></pre>
+<pre class="r"><code>correlationMatrix &lt;- cor(trainDataProcessed[, -53])
+corrplot(
+  correlationMatrix, order = &quot;FPC&quot;, method = &quot;color&quot;, type = &quot;lower&quot;, 
+  tl.cex = 0.8, tl.col = rgb(0, 0, 0))</code></pre>
+<p><img src="PML_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p>We observe some dark points (with high negative and positive correlation), which mean they don’t add much information to our model. Let’s remove those with a correlation coefficient higher than 0.90:</p>
+<pre class="r"><code>correlatedCol &lt;- findCorrelation(correlationMatrix, cutoff = .90)
+
+trainDataProcessed &lt;- trainDataProcessed[,-correlatedCol]
+testDataProcessed &lt;- testDataProcessed[,-correlatedCol]
+
+dim(trainDataProcessed)</code></pre>
+<pre><code>## [1] 19622    46</code></pre>
+<p>With this the number of columns is reduced to 46 (45 predictors and the outcome). We can now create the predictor model.</p>
+</div>
+<div id="training-model" class="section level2">
+<h2>Training Model</h2>
+<p>We have a large dataset and still many predictors. Random Forests provide good performance under these conditions, so that’s the algorithm we select to build our prediction model.</p>
+<p>First we split the training set to obtain the actual model training set and a validation set:</p>
+<pre class="r"><code>set.seed(12345)
+
+splitIndex &lt;- createDataPartition(
+  y=trainDataProcessed$classe, p=0.6, list=FALSE)
+
+modelTrainData  &lt;- trainDataProcessed[splitIndex,]; 
+modelValData &lt;- trainDataProcessed[-splitIndex,]</code></pre>
+<p>Now we train the classifier using random forests with 3-fold cross-validation</p>
+<pre class="r"><code>ctrl &lt;- trainControl(method=&quot;cv&quot;, number=3)
+
+set.seed(12345)
+
+model &lt;- train(classe ~ ., data=modelTrainData, method=&quot;rf&quot;, trControl=ctrl)</code></pre>
+<p>To understand our model, let’s take a look to the most important predictors:</p>
+<pre class="r"><code>varImp(model, scale = FALSE)</code></pre>
+<pre><code>## rf variable importance
+## 
+##   only 20 most important variables shown (out of 45)
+## 
+##                      Overall
+## yaw_belt               973.8
+## pitch_forearm          793.8
+## pitch_belt             663.5
+## magnet_dumbbell_z      630.4
+## magnet_dumbbell_y      491.9
+## magnet_belt_y          433.8
+## roll_forearm           429.5
+## gyros_belt_z           303.4
+## magnet_belt_z          284.1
+## magnet_dumbbell_x      271.0
+## accel_dumbbell_y       255.3
+## roll_dumbbell          250.4
+## accel_forearm_x        231.3
+## accel_dumbbell_z       201.3
+## magnet_belt_x          199.0
+## accel_forearm_z        194.0
+## total_accel_belt       175.1
+## total_accel_dumbbell   170.4
+## magnet_forearm_z       169.6
+## yaw_arm                153.0</code></pre>
+<p>Most predictors are quite relevant, which means the preprocessing was correct.</p>
+</div>
+<div id="evaluating-model" class="section level2">
+<h2>Evaluating Model</h2>
+<p>Now we use the validation data to measure the performance of our prediction model:</p>
+<pre class="r"><code>confusionMatrix(predict(model, newdata=modelValData), modelValData$classe)</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 2229   10    0    0    0
+##          B    3 1501    8    0    0
+##          C    0    7 1357   18    2
+##          D    0    0    3 1266    4
+##          E    0    0    0    2 1436
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9927          
+##                  95% CI : (0.9906, 0.9945)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9908          
+##  Mcnemar&#39;s Test P-Value : NA              
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9987   0.9888   0.9920   0.9844   0.9958
+## Specificity            0.9982   0.9983   0.9958   0.9989   0.9997
+## Pos Pred Value         0.9955   0.9927   0.9805   0.9945   0.9986
+## Neg Pred Value         0.9995   0.9973   0.9983   0.9970   0.9991
+## Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838
+## Detection Rate         0.2841   0.1913   0.1730   0.1614   0.1830
+## Detection Prevalence   0.2854   0.1927   0.1764   0.1622   0.1833
+## Balanced Accuracy      0.9984   0.9935   0.9939   0.9917   0.9978</code></pre>
+<p>We got a high accuracy, close of 99% and a model error of 1%.</p>
+</div>
+<div id="predictions" class="section level2">
+<h2>Predictions</h2>
+<p>Finally we get the predictions for the test dataset provided:</p>
+<pre class="r"><code>testPredictions &lt;- predict(model, newdata=testDataProcessed)
+
+testPredictions</code></pre>
+<pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E</code></pre>
+</div>
+<div id="conclusion" class="section level2">
+<h2>Conclusion</h2>
+<p>The predictor model built with random forests and cross validation over the HAR weight lifting exercises dataset allows to determine with a high accuracy the way in which an exercise was performed.</p>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+$(document).ready(function () {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+});
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
